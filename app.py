@@ -7,11 +7,10 @@ from reportlab.lib.styles import getSampleStyleSheet
 
 app = Flask(__name__)
 
-# ---------- API KEY ----------
-# Must set in Render Environment Variables as API_KEY
-API_KEY = os.getenv("API_KEY", "")
+# Get Gemini API key from environment variables (safer for deployment)
+API_KEY = os.getenv("API_KEY")  # Set this in Render dashboard
 
-# ---------- DATABASE ----------
+# ---------------- DATABASE ----------------
 def init_db():
     conn = sqlite3.connect('database.db')
     c = conn.cursor()
@@ -22,28 +21,30 @@ def init_db():
 
 init_db()
 
-# ---------- CLEAN TEXT ----------
+# ---------------- CLEAN TEXT ----------------
 def clean_text(text):
     for ch in ["*", "**", "•"]:
         text = text.replace(ch, "")
     return text
 
-# ---------- GEMINI API CALL ----------
+# ---------------- GEMINI API CALL WITH FALLBACK ----------------
 def call_gemini(prompt):
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key={API_KEY}"
-    data = {"contents":[{"parts":[{"text":prompt}]}]}
-    try:
-        res = requests.post(url, json=data)
-        result = res.json()
-        if "candidates" not in result:
-            print("API ERROR:", result)
-            return "⚠️ AI error. Check API key/quota"
-        return clean_text(result['candidates'][0]['content']['parts'][0]['text'])
-    except Exception as e:
-        print("SERVER ERROR:", e)
-        return "⚠️ Server error occurred"
+    if API_KEY:
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key={API_KEY}"
+        data = {"contents":[{"parts":[{"text":prompt}]}]}
+        try:
+            res = requests.post(url, json=data, timeout=10)
+            result = res.json()
+            if "candidates" in result:
+                return clean_text(result['candidates'][0]['content']['parts'][0]['text'])
+            else:
+                print("API ERROR:", result)
+        except Exception as e:
+            print("API SERVER ERROR:", e)
+    # Fallback mock response if API fails or key missing
+    return f"[MOCK AI RESPONSE] Study plan for: {prompt}"
 
-# ---------- FRONTEND ----------
+# ---------------- FRONTEND ----------------
 @app.route('/')
 def home():
     return """
@@ -129,7 +130,7 @@ fetch('/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JS
 </html>
 """
 
-# ---------- BACKEND ----------
+# ---------------- BACKEND ----------------
 @app.route('/set_goal', methods=['POST'])
 def set_goal():
     goal = request.json['goal']
@@ -204,7 +205,6 @@ def chat():
     reply = call_gemini(msg)
     return jsonify({"reply": reply})
 
-# ---------- RUN ----------
+# ---------------- RUN ----------------
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 10000))
-    app.run(host="0.0.0.0", port=port, debug=True)
+    app.run(host="0.0.0.0", port=10000)
