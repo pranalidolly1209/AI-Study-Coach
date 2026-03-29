@@ -7,9 +7,8 @@ from reportlab.lib.styles import getSampleStyleSheet
 
 app = Flask(__name__)
 
-# 🔐 API KEY (safe for deploy)
-API_KEY = os.getenv("AIzaSyCV2Jz7nUMHesiZuS2NsNPk7Q9T_Gds08k") 
-
+# Your Gemini API key from environment variables (safer for deployment)
+API_KEY = os.getenv("API_KEY", "AIzaSyCV2Jz7nUMHesiZuS2NsNPk7Q9T_Gds08k")
 
 # ---------------- DATABASE ----------------
 def init_db():
@@ -22,41 +21,26 @@ def init_db():
 
 init_db()
 
-
 # ---------------- CLEAN TEXT ----------------
 def clean_text(text):
     for ch in ["*", "**", "•"]:
         text = text.replace(ch, "")
     return text
 
-
-# ---------------- GEMINI API ----------------
+# ---------------- GEMINI API CALL ----------------
 def call_gemini(prompt):
     url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key={API_KEY}"
-
-    data = {
-        "contents": [
-            {
-                "parts": [{"text": prompt}]
-            }
-        ]
-    }
-
+    data = {"contents":[{"parts":[{"text":prompt}]}]}
     try:
         res = requests.post(url, json=data)
         result = res.json()
-
-        # ✅ Safe handling (no crash)
         if "candidates" not in result:
             print("API ERROR:", result)
-            return "⚠️ AI error (check API key or quota)"
-
+            return "⚠️ AI error. Check API key/quota"
         return clean_text(result['candidates'][0]['content']['parts'][0]['text'])
-
     except Exception as e:
         print("SERVER ERROR:", e)
         return "⚠️ Server error occurred"
-
 
 # ---------------- FRONTEND ----------------
 @app.route('/')
@@ -67,205 +51,82 @@ def home():
 <head>
 <title>AI Study Coach</title>
 <link rel="icon" href="data:,">
-
 <style>
-body{
-margin:0;
-font-family:Segoe UI;
-display:flex;
-background:linear-gradient(135deg,#667eea,#764ba2);
-color:white;
-}
-
-.sidebar{
-width:260px;
-background:rgba(255,255,255,0.12);
-backdrop-filter:blur(20px);
-padding:20px;
-}
-
-.task{
-display:flex;
-gap:10px;
-margin:10px 0;
-}
-
-.main{
-flex:1;
-padding:30px;
-}
-
-h1{
-text-align:center;
-}
-
-.card{
-background:rgba(255,255,255,0.15);
-padding:20px;
-border-radius:15px;
-margin-bottom:20px;
-transition:0.3s;
-}
-
-.card:hover{
-transform:translateY(-6px);
-}
-
-input{
-padding:10px;
-width:60%;
-border:none;
-border-radius:5px;
-}
-
-button{
-padding:10px;
-background:#ff7e5f;
-color:white;
-border:none;
-border-radius:5px;
-margin:5px;
-cursor:pointer;
-}
+body{margin:0;font-family:Segoe UI;display:flex;background:linear-gradient(135deg,#667eea,#764ba2);color:white;}
+.sidebar{width:260px;background:rgba(255,255,255,0.12);backdrop-filter:blur(20px);padding:20px;}
+.task{display:flex;gap:10px;margin:10px 0;}
+.main{flex:1;padding:30px;}
+h1{text-align:center;}
+.card{background:rgba(255,255,255,0.15);padding:20px;border-radius:15px;margin-bottom:20px;transition:0.3s;}
+.card:hover{transform:translateY(-6px);}
+input{padding:10px;width:60%;border:none;border-radius:5px;}
+button{padding:10px;background:#ff7e5f;color:white;border:none;border-radius:5px;margin:5px;cursor:pointer;}
 </style>
 </head>
-
 <body>
-
 <div class="sidebar">
 <h2 id="goalTitle">🎯 Goal</h2>
 <div id="tasks"></div>
 </div>
-
 <div class="main">
-
 <h1>🤖 AI Study Coach</h1>
-
 <div class="card">
 <input id="goal" placeholder="Enter goal">
 <button onclick="setGoal()">Set Goal</button>
 <button onclick="generatePlan()">Generate Plan</button>
 <button onclick="removeGoal()">❌ Remove</button>
 </div>
-
 <div class="card">
 <h3>📅 Study Plan</h3>
 <ul id="plan"></ul>
 <button onclick="downloadPDF()">Download PDF</button>
 </div>
-
 <div class="card">
 <h3>💬 Chat</h3>
 <input id="msg">
 <button onclick="chat()">Send</button>
 <p id="chatbox"></p>
 </div>
-
 </div>
-
 <script>
-
-// Set Goal
 function setGoal(){
 let goal=document.getElementById('goal').value;
-
-fetch('/set_goal',{
-method:'POST',
-headers:{'Content-Type':'application/json'},
-body:JSON.stringify({goal})
-})
-.then(res=>res.json())
-.then(()=>{
-document.getElementById('goalTitle').innerText="🎯 "+goal;
-});
+fetch('/set_goal',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({goal})})
+.then(res=>res.json()).then(()=>{document.getElementById('goalTitle').innerText="🎯 "+goal;});
 }
-
-// Remove Goal
 function removeGoal(){
-fetch('/remove_goal',{method:'POST'})
-.then(()=>{
-document.getElementById('goalTitle').innerText="🎯 Goal";
-document.getElementById('tasks').innerHTML="";
-document.getElementById('plan').innerHTML="";
-});
+fetch('/remove_goal',{method:'POST'}).then(()=>{document.getElementById('goalTitle').innerText="🎯 Goal";document.getElementById('tasks').innerHTML="";document.getElementById('plan').innerHTML="";});
 }
-
-// Generate Plan
 function generatePlan(){
 let goal=document.getElementById('goal').value;
-
-fetch('/generate_plan',{
-method:'POST',
-headers:{'Content-Type':'application/json'},
-body:JSON.stringify({goal})
-})
+fetch('/generate_plan',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({goal})})
 .then(res=>res.json())
 .then(data=>{
-let html="";
-data.plan.forEach(p=>{
-html+="<li>"+p+"</li>";
-});
-document.getElementById('plan').innerHTML=html;
+let html="";data.plan.forEach(p=>{html+="<li>"+p+"</li>";});document.getElementById('plan').innerHTML=html;
 loadTasks();
 });
 }
-
-// Load Tasks
 function loadTasks(){
-fetch('/get_tasks')
-.then(res=>res.json())
-.then(data=>{
-let html="";
-data.forEach(t=>{
-html+=`
-<div class="task">
-<input type="checkbox" onclick="updateTask(${t[0]})">
-<span style="font-weight:bold;">${t[1]}</span>
-</div>`;
-});
+fetch('/get_tasks').then(res=>res.json()).then(data=>{
+let html="";data.forEach(t=>{html+=`<div class="task"><input type="checkbox" onclick="updateTask(${t[0]})"><span style="font-weight:bold;">${t[1]}</span></div>`});
 document.getElementById('tasks').innerHTML=html;
 });
 }
-
-// Remove task
 function updateTask(id){
-fetch('/update_task',{
-method:'POST',
-headers:{'Content-Type':'application/json'},
-body:JSON.stringify({id})
-}).then(loadTasks);
+fetch('/update_task',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id})}).then(loadTasks);
 }
-
-// Download PDF
 function downloadPDF(){
-fetch('/download_pdf',{
-method:'POST',
-headers:{'Content-Type':'application/json'},
-body:JSON.stringify({plan:document.getElementById("plan").innerText})
-})
-.then(()=>{
-window.location.href="/study_plan.pdf";
-});
+fetch('/download_pdf',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({plan:document.getElementById("plan").innerText})})
+.then(()=>{window.location.href="/study_plan.pdf";});
 }
-
-// Chat
 function chat(){
-fetch('/chat',{
-method:'POST',
-headers:{'Content-Type':'application/json'},
-body:JSON.stringify({message:document.getElementById('msg').value})
-})
-.then(res=>res.json())
-.then(d=>{
-document.getElementById('chatbox').innerText=d.reply;
-});
+fetch('/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:document.getElementById('msg').value})})
+.then(res=>res.json()).then(d=>{document.getElementById('chatbox').innerText=d.reply;});
 }
 </script>
-
 </body>
 </html>
 """
-
 
 # ---------------- BACKEND ----------------
 @app.route('/set_goal', methods=['POST'])
@@ -279,7 +140,6 @@ def set_goal():
     conn.close()
     return jsonify({"goal": goal})
 
-
 @app.route('/remove_goal', methods=['POST'])
 def remove_goal():
     conn = sqlite3.connect('database.db')
@@ -290,28 +150,20 @@ def remove_goal():
     conn.close()
     return jsonify({"message": "removed"})
 
-
 @app.route('/generate_plan', methods=['POST'])
 def generate_plan():
     goal = request.json['goal']
-
     reply = call_gemini(f"Create a detailed 5 day study plan for {goal}")
-
-    lines = [l.strip() for l in reply.split("\\n") if l.strip()]
+    lines = [l.strip() for l in reply.split("\n") if l.strip()]
     tasks = [l for l in lines if l.lower().startswith("day")]
-
     conn = sqlite3.connect('database.db')
     c = conn.cursor()
     c.execute("DELETE FROM tasks")
-
     for t in tasks:
         c.execute("INSERT INTO tasks (task) VALUES (?)", (t,))
-
     conn.commit()
     conn.close()
-
     return jsonify({"plan": lines})
-
 
 @app.route('/get_tasks')
 def get_tasks():
@@ -321,7 +173,6 @@ def get_tasks():
     data = c.fetchall()
     conn.close()
     return jsonify(data)
-
 
 @app.route('/update_task', methods=['POST'])
 def update_task():
@@ -333,31 +184,24 @@ def update_task():
     conn.close()
     return jsonify({"message": "done"})
 
-
 @app.route('/download_pdf', methods=['POST'])
 def download_pdf():
     plan = request.json['plan']
-
     doc = SimpleDocTemplate("study_plan.pdf")
     styles = getSampleStyleSheet()
-
-    content = [Paragraph(line, styles["Normal"]) for line in plan.split("\\n")]
+    content = [Paragraph(line, styles["Normal"]) for line in plan.split("\n")]
     doc.build(content)
-
     return jsonify({"file": "study_plan.pdf"})
-
 
 @app.route('/study_plan.pdf')
 def serve_pdf():
     return send_file("study_plan.pdf", as_attachment=True)
-
 
 @app.route('/chat', methods=['POST'])
 def chat():
     msg = request.json['message']
     reply = call_gemini(msg)
     return jsonify({"reply": reply})
-
 
 # ---------------- RUN ----------------
 if __name__ == "__main__":
